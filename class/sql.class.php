@@ -6,11 +6,11 @@ class sql{
 	var $select_ 	= array();
 	var $from_ 		= array();
 	var $join_ 		= array();
-	var $where_		= '';
+	var $where_		= array();
 	var $order_		= '';
 	var $group_		= '';
 	var $having_	= '';
-	var $limit_ 	= '';
+	var $limit_ 	= array(0,100);
 	var $tab_default = '';
 
 	function select( $tab, $columns = '*' ){
@@ -35,6 +35,13 @@ class sql{
 		return $this;
 	}
 
+	function where( $tab, $field, $value ){
+
+		$this->where_[$tab] = array( 'column' 	=> $field,
+									 'value'	=> $value );
+		
+		return $this;
+	}
 
 	function join( $tab , $column = NULL, $join = 'JOIN', $tab1 = NULL, $column2 = NULL ){
 
@@ -42,6 +49,14 @@ class sql{
 		if( !$column2 ) $column2 = $column;
 
 		$this->join_[$tab] = array( $join, $tab, $column, $column2, $tab1 );
+		return $this;
+
+	}
+
+	function limit( $limit = 100, $page = 1 ,$from = 0 ){
+
+		$from = ( $page - 1 ) * $limit;
+		$this->limit_ = array( $from, $limit );
 		return $this;
 
 	}
@@ -63,16 +78,26 @@ class sql{
 			break;
 		}
 
-		$joins_str = "";
-		
+		$joins_str = "";		
 		if( count( $this->join_ ) ){
 			foreach( $this->join_ as $t => $j){
 				$joins[] = " ".$j[0]." ".$j[1]." ON ".$t.".".$j[2]." = ".$j[4].".".$j[3];
 			}	
 			$joins_str = implode('', $joins);
 		}
+
+		$where_str = "";
+		if( count( $this->where_ ) ){
+			foreach( $this->where_ as $t => $w){
+				$where[] = " ".$t.".".$w['column']." = '".$w['value']."' ";
+			}	
+			$where_str = " WHERE ".implode(' AND ', $where);
+		}
+
+
 		
-		$this->query_ = $select."  ".$from."  ".$joins_str;
+		$this->query_ = $select."  ".$from."  ".$joins_str." ".$where_str." LIMIT ".implode(',',$this->limit_);
+
 
 		return $this;
 
@@ -95,6 +120,8 @@ class sql{
 			preg_match('/(FROM\s+)(.*)/i', $from_, $mfrom);
 			$from = $mfrom[1];
 			$ffields = $mfrom[2];
+
+			$limit = $match[7];
 
 
 			$output .= str_pad($select, 10, " ") .$sfields."<BR>";

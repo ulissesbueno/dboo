@@ -38,6 +38,8 @@ class system{
 	var $con = '';
 	var $msg = '';
 	var $success = true;
+	var $result_json;
+	var $datasql = array();
 
 	// Connect mysql
 	function __construct( $id = NULL ){
@@ -71,7 +73,10 @@ class system{
 	}
 
 	function get( $index ){
-		return $this->datasql[$index];
+		if( array_key_exists( $index , $this->datasql ) ){
+			return $this->datasql[$index];	
+		}
+		
 	}
 
 	function showdata(){
@@ -111,8 +116,6 @@ class system{
 		} 
 
 	}
-
-	var $datasql = '';
 
 	function addSetSQL( $name, $value ){
 		$this->datasql[$name] = $value;
@@ -199,12 +202,37 @@ class system{
 		if( $res->num_rows ){
 			while ($row = $res->fetch_assoc()) {
 				//echo "<pre>".print_r( $row, 1 )."</pre>";
-				$basic->select( $row['REFERENCED_TABLE_NAME'], '*' )->join( $row['REFERENCED_TABLE_NAME'], $row['COLUMN_NAME'], "JOIN", $this->table );
+				$basic->select( $row['REFERENCED_TABLE_NAME'], '*' )->
+								join( $row['REFERENCED_TABLE_NAME'], $row['COLUMN_NAME'], "JOIN", $this->table );
 			}
-		}		
+		}	
 
-		echo "<pre>". $basic->_do()->_print()."</pre>";
+		if( $this->get($this->pri) )	{
+			$basic->where( $this->table, $this->pri, $this->get($this->pri) );
+		}
 
+		$basic->limit( 20 , 1 );
+
+		//echo "<pre>". $basic->_do()->query_."</pre>";
+		$result = $this->con->query( $basic->_do()->query_ );
+		$this->jsonfy($result);
+		return $this;
+	}
+
+	function jsonfy( $res ){	
+
+		$json = '';
+		while( $row = $res->fetch_assoc() ){
+			$json[] = $row;
+		}	
+
+		$this->result_json = json_encode( $json , 1  );
+		return $this->result_json;	
+
+	}
+
+	function output(){
+		echo $this->result_json;
 	}
 
 	function getRules( $name = '' ){
