@@ -2,7 +2,7 @@
 
 include 'class/system.class.php';
 
-$bg_card = new B004_Pessoas();
+$bg_card = new categorias();
 $bg_card->grid();
 /*$categorias->save();
 if( !$categorias->success ){

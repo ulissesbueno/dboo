@@ -1,8 +1,8 @@
 <?php
 
 
-define('HOST','');
-define('USER','');
+define('HOST','localhost');
+define('USER','root');
 define('PASS','');
-define('BASE','');
+define('BASE','botfacil');
 define('PORT','');

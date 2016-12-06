@@ -88,13 +88,17 @@ class sql{
 			$select_ = $match[1];
 			preg_match('/(SELECT\s+)(.*)/i', $select_, $mselect);
 			$select = $mselect[1];
-			$fields = $mselect[2];
-			
+			$sfields = $mselect[2];
 
 
+			$from_ = $match[2];
+			preg_match('/(FROM\s+)(.*)/i', $from_, $mfrom);
+			$from = $mfrom[1];
+			$ffields = $mfrom[2];
 
-			$output .= $select."<BR>";
-			$output .= $match[2]."<BR>";
+
+			$output .= str_pad($select, 10, " ") .$sfields."<BR>";
+			$output .= str_pad($from, 10, " ") .$ffields ."<BR>";
 
 			return $output;
 
