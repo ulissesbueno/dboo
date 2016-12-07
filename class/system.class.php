@@ -38,7 +38,7 @@ class system{
 	var $con = '';
 	var $msg = '';
 	var $success = true;
-	var $result_json;
+	var $result_json = '';
 	var $datasql = array();
 
 	// Connect mysql
@@ -223,6 +223,9 @@ class system{
 
 		$json = '';
 		while( $row = $res->fetch_assoc() ){
+			foreach( $row as $index => $value ){
+				$row[$index] = utf8_decode( $value );
+			}
 			$json[] = $row;
 		}	
 
