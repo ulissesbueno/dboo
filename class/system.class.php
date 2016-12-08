@@ -1,7 +1,9 @@
 <?php
 include 'setting.php';
 include 'sql.class.php';
+include 'normalize.class.php';
 include 'connect.php';
+include_once 'SqlFormatter.php';
 
 spl_autoload_register(function ($class_name) {
     
@@ -38,7 +40,7 @@ class system{
 	var $con = '';
 	var $msg = '';
 	var $success = true;
-	var $result_json = '';
+	var $result = '';
 	var $datasql = array();
 
 	// Connect mysql
@@ -64,8 +66,8 @@ class system{
 				}
 			}
 
-
 		} else {
+			$this->success = false;
 			$this->msg = 'Nenhum registro encontrado';
 		}
 		
@@ -186,14 +188,60 @@ class system{
 
 	}
 
+	var $selection = array();
+
+	function select( $sel ){
+
+		$sel = preg_replace('/\s+/','',$sel);
+
+		if(preg_match_all('/(.[^\,]*?)(\,|$)/i', $sel, $matches)){
+			foreach( $matches[1] as $s ){
+				if( preg_match('/(.[^\.]*)\.*(.*)/i', $s, $match) ){
+					if( $match[2] ){
+						$this->selection[$match[1]][] = $match[2];
+					} else {
+						$this->selection[$this->table][] = $match[1];
+					}
+				}
+			}
+		}
+
+		return $this;
+	}
+
+	var $normalize_ = array();
+	var $normalize_class = '';
+
+	function normalize( $column, $method, $alias = '' ){
+		
+		$this->normalize_class = new normalize;
+		if( method_exists( $this->normalize_class , $method ) ){
+
+			$this->normalize_[$column] = $method;
+
+		} else {
+			$this->success = false;
+			$this->msg = "Método Noramalize não existe!";
+		}
+
+		return $this;
+
+	}
+
 	var $limit = 20;
 	var $page = 1;
 
 	function grid(){
 
 		$sql = new sql;
-		
-		$basic = $sql->select( $this->table, '*' )->from( $this->table );
+		$data_sel = '*';
+
+		if( count( $this->selection ) ){
+			if( array_key_exists( $this->table , $this->selection) ) $data_sel = $this->selection[$this->table];
+			$basic = $sql->select( $this->table, $data_sel )->from( $this->table );
+		} else {
+			$basic = $sql->select( $this->table, '*' )->from( $this->table );
+		}		
 
 		$select = "	SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME , CONSTRAINT_NAME 
 					FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
@@ -201,9 +249,20 @@ class system{
 		$res = $this->con->query( $select );
 		if( $res->num_rows ){
 			while ($row = $res->fetch_assoc()) {
-				//echo "<pre>".print_r( $row, 1 )."</pre>";
-				$basic->select( $row['REFERENCED_TABLE_NAME'], '*' )->
-								join( $row['REFERENCED_TABLE_NAME'], $row['COLUMN_NAME'], "JOIN", $this->table );
+				
+				$tb = $row['REFERENCED_TABLE_NAME'];
+
+				if( count( $this->selection ) ){
+					if( array_key_exists( $tb , $this->selection) ){
+						$data_sel = $this->selection[$tb] ;
+						$basic->select( $tb, $data_sel );		
+					} 
+				} else {
+					$basic->select( $tb, '*' );
+				}
+				
+				$basic->join( $tb, $row['COLUMN_NAME'], "JOIN", $this->table );
+
 			}
 		}	
 
@@ -211,10 +270,11 @@ class system{
 			$basic->where( $this->table, $this->pri, $this->get($this->pri) );
 		}
 
-		$basic->limit( 20 , 1 );
+		$basic->limit( 20 , $this->page );
 
 		//echo "<pre>". $basic->_do()->query_."</pre>";
-		$result = $this->con->query( $basic->_do()->query_ );
+		$this->query = $basic->_do()->query_;		
+		$result = $this->con->query( $this->query );
 		$this->jsonfy($result);
 		return $this;
 	}
@@ -224,18 +284,28 @@ class system{
 		$json = '';
 		while( $row = $res->fetch_assoc() ){
 			foreach( $row as $index => $value ){
+
+				if( array_key_exists( $index , $this->normalize_) ){
+					$value = call_user_method( $this->normalize_[$index] , $this->normalize_class, $value );
+				}
+
 				$row[$index] = utf8_decode( $value );
 			}
 			$json[] = $row;
 		}	
 
-		$this->result_json = json_encode( $json , 1  );
-		return $this->result_json;	
+		$this->result = $json;
+		return $json;	
 
 	}
 
 	function output(){
-		echo $this->result_json;
+
+		$return = array('success' => $this->success,
+						'message' => $this->msg,
+						'data'	  => $this->result	);
+
+		echo json_encode( $return , 1 ) ;
 	}
 
 	function getRules( $name = '' ){

@@ -12,23 +12,52 @@ class sql{
 	var $having_	= '';
 	var $limit_ 	= array(0,100);
 	var $tab_default = '';
+	var $alias_ 	= array();
+	var $letter		= '';
+
+	function __construct(){
+		$this->letter = implode('',range( 'a', 'z' ));
+	}
+
+	function alias( $tab ){
+
+		if( !array_key_exists( $tab , $this->alias_ ) ){
+			$l = $this->letter[0];
+			$this->letter = substr($this->letter,1);
+			$this->alias_[$tab] = $l;
+			return $l;			
+		} else {
+			return $this->alias_[$tab];
+		}
+
+
+		
+	}
 
 	function select( $tab, $columns = '*' ){
 
+		$alias = $this->alias( $tab );
+
 		if( $columns ){
-			$this->select_[$tab][] = $columns;	
+			if( $columns == '*' ){
+
+				$this->select_[$alias][] = $columns;
+
+			} else {
+
+				$this->select_[$alias] = $columns;		
+			}
+			
 		} else {
-			if( !array_key_exists( $tab ,  $this->select_ ) ){
-				$this->select_[$tab] = '';
+			if( !array_key_exists( $alias ,  $this->select_ ) ){
+				$this->select_[$alias] = '';
 			}
 		}
 		
 		return $this;
 	}
 
-	function from( $tab, $alias = NULL ){
-
-		if( !$alias ) $alias = $tab;
+	function from( $tab ){
 
 		$this->from_[$tab] = $tab;
 		
@@ -37,7 +66,9 @@ class sql{
 
 	function where( $tab, $field, $value ){
 
-		$this->where_[$tab] = array( 'column' 	=> $field,
+		$alias = $this->alias( $tab );
+
+		$this->where_[$alias] = array( 'column' 	=> $field,
 									 'value'	=> $value );
 		
 		return $this;
@@ -73,7 +104,7 @@ class sql{
 		$select = "SELECT ".implode(",", $sel);
 
 		foreach( $this->from_ as $i => $f){
-			$from = " FROM ". $f;
+			$from = " FROM ". $f." ".$this->alias( $f );
 			if( $i != $f ) $from .= " ".$i;
 			break;
 		}
@@ -81,7 +112,7 @@ class sql{
 		$joins_str = "";		
 		if( count( $this->join_ ) ){
 			foreach( $this->join_ as $t => $j){
-				$joins[] = " ".$j[0]." ".$j[1]." ON ".$t.".".$j[2]." = ".$j[4].".".$j[3];
+				$joins[] = " ".$j[0]." ".$j[1]." ".$this->alias($j[1])." ON ".$this->alias($t).".".$j[2]." = ".$this->alias($j[4]).".".$j[3];
 			}	
 			$joins_str = implode('', $joins);
 		}
@@ -93,17 +124,17 @@ class sql{
 			}	
 			$where_str = " WHERE ".implode(' AND ', $where);
 		}
-
-
 		
 		$this->query_ = $select."  ".$from."  ".$joins_str." ".$where_str." LIMIT ".implode(',',$this->limit_);
-
+		//echo $this->query_;
+		//echo print_r($this->alias_, 1);		
 
 		return $this;
 
 	}
 
 	function _print(){
+
 		//echo $this->query_;
 		if ( preg_match( '/(SELECT.*)(FROM.*)(WHERE.*)*(ORDER\sBY.*)*(GROUP\sBY.*)*(HAVING.*)*(LIMIT.*)*/i', $this->query_, $match ) ){
 				
