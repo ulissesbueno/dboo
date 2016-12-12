@@ -68,8 +68,9 @@ class sql{
 
 		$alias = $this->alias( $tab );
 
-		$this->where_[$alias] = array( 'column' 	=> $field,
-									 'value'	=> $value );
+		$this->where_[] = array( 	'column' 	=> $field,
+								   	'value'		=> $value,
+								   	'table'		=> $alias );
 		
 		return $this;
 	}
@@ -120,7 +121,7 @@ class sql{
 		$where_str = "";
 		if( count( $this->where_ ) ){
 			foreach( $this->where_ as $t => $w){
-				$where[] = " ".$t.".".$w['column']." = '".$w['value']."' ";
+				$where[] = " ".$w['table'].".".$w['column']." = '".$w['value']."' ";
 			}	
 			$where_str = " WHERE ".implode(' AND ', $where);
 		}

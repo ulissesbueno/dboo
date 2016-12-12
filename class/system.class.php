@@ -42,6 +42,7 @@ class system{
 	var $success = true;
 	var $result = '';
 	var $datasql = array();
+	var $filter = array();
 
 	// Connect mysql
 	function __construct( $id = NULL ){
@@ -60,10 +61,10 @@ class system{
 			$row = $res->fetch_assoc();
 			foreach ($row as $key => $value) {
 				$this->$key = $value;
-				if( !$this->success ){
-					echo $this->msg;
+				$this->result[ $key ] = utf8_encode($value);
+				/*if( !$this->success ){
 					break;
-				}
+				}*/
 			}
 
 		} else {
@@ -123,6 +124,10 @@ class system{
 		$this->datasql[$name] = $value;
 	}
 
+	function addFilter( $name, $value ){
+		if( $value ) $this->filter[$name] = $value;
+	}
+
 	function save( $post = NULL ){
 		
 		if( $post ){
@@ -132,10 +137,9 @@ class system{
 					return false;
 				}
 			}
-		} else {
-			// verifica se os tipos estão validados
-			if( !$this->success ) return false;
-		}
+		} 
+
+		if( !$this->success ) return false;
 
 		// pega regra
 		$rules = $this->getRules();
@@ -147,6 +151,7 @@ class system{
 				$value['Key'] != 'PRI'  ){
 				$this->success = false;
 				$this->msg = "O Campo '".$key."' é obrigatório!";
+				return false;
 				break;
 			}
 		}
@@ -180,7 +185,7 @@ class system{
 
 		$sets = "";
 		foreach( $this->datasql as $index => $value ){
-			$sets[] = "  ".$index." = '".$value."' ";
+			$sets[] = "  ".$index." = '". utf8_decode( $value )."' ";
 		}
 
 		$this->query = $pre.$this->table." SET ".implode( " , ",$sets ).$where;
@@ -190,7 +195,7 @@ class system{
 
 	var $selection = array();
 
-	function select( $sel ){
+	function putSelect( $sel ){
 
 		$sel = preg_replace('/\s+/','',$sel);
 
@@ -198,6 +203,7 @@ class system{
 			foreach( $matches[1] as $s ){
 				if( preg_match('/(.[^\.]*)\.*(.*)/i', $s, $match) ){
 					if( $match[2] ){
+						$sel = $match[2];
 						$this->selection[$match[1]][] = $match[2];
 					} else {
 						$this->selection[$this->table][] = $match[1];
@@ -206,24 +212,31 @@ class system{
 			}
 		}
 
-		return $this;
+		return $sel;
+
 	}
 
 	var $normalize_ = array();
 	var $normalize_class = '';
 
-	function normalize( $column, $method, $alias = '' ){
-		
-		$this->normalize_class = new normalize;
-		if( method_exists( $this->normalize_class , $method ) ){
+	function select( $column, $label, $alias = '', $method = '', $show = true, $width = 100 ){
+			
+		$column = $this->putSelect( $column );
 
-			$this->normalize_[$column] = $method;
-
-		} else {
-			$this->success = false;
-			$this->msg = "Método Noramalize não existe!";
+		if( $method ){
+			$this->normalize_class = new normalize;
+			if( !method_exists( $this->normalize_class , $method ) ){
+				$this->success = false;
+				$this->msg = "Método Noramalize não existe!";
+			}	
 		}
 
+		$this->normalize_[$column] = array(	'label' 	=> $label,
+											'alias' 	=> $alias,
+											'method'	=> $method,
+											'show'		=> $show,
+											'width'		=> $width);
+		
 		return $this;
 
 	}
@@ -270,6 +283,12 @@ class system{
 			$basic->where( $this->table, $this->pri, $this->get($this->pri) );
 		}
 
+		if( $this->filter ){
+			foreach ($this->filter as $key => $value) {
+				$basic->where( $this->table, $key, $value );
+			}
+		}
+
 		$basic->limit( 20 , $this->page );
 
 		//echo "<pre>". $basic->_do()->query_."</pre>";
@@ -279,18 +298,47 @@ class system{
 		return $this;
 	}
 
-	function jsonfy( $res ){	
+	var $columns_grid;
 
+	function jsonfy( $res ){	
+		//print_r( $this->normalize_);
+		//echo "<br>";
+		//echo "<pre>". $this->query."</pre>";
 		$json = '';
+		$columns = '';
+		$first = true;
 		while( $row = $res->fetch_assoc() ){
 			foreach( $row as $index => $value ){
+				
+				$label = $index;
+				$width = 100;
 
 				if( array_key_exists( $index , $this->normalize_) ){
-					$value = call_user_method( $this->normalize_[$index] , $this->normalize_class, $value );
+
+					if( $this->normalize_[$index]['method'] ){
+						$value = call_user_method( $this->normalize_[$index]['method'] , $this->normalize_class, $value );	
+					}						
+
+					if( $this->normalize_[$index]['label'] ){
+						$label = $this->normalize_[$index]['label'];
+					}
+
+					if( !$this->normalize_[$index]['show'] ){
+						continue;
+					}
+
+					$width = $this->normalize_[$index]['width'];
+				} else {
+					//
 				}
 
-				$row[$index] = utf8_decode( $value );
+				if( $first ){					
+					$this->columns_grid[] = array('field'=>$index, 'title' => $label, 'width' => $width );	
+				}
+
+				$row[$index] = utf8_encode( $value );
 			}
+			$first = false;
 			$json[] = $row;
 		}	
 
@@ -303,7 +351,9 @@ class system{
 
 		$return = array('success' => $this->success,
 						'message' => $this->msg,
-						'data'	  => $this->result	);
+						'data'	  => $this->result,
+						'columns' => $this->columns_grid,
+						'sql'	  => SqlFormatter::format($this->query));
 
 		echo json_encode( $return , 1 ) ;
 	}
@@ -318,6 +368,8 @@ class system{
 
 	public function __set($name, $value){
 
+		if( $name == $this->pri ) return true;
+
         // valida o tipo de entrada de dados
         $rule = $this->getRules( $name );
 		if( !$this->CheckType( $rule['Type'], $value, $rule['Null'] ) ){
@@ -331,6 +383,16 @@ class system{
 		return $this->success;
 
     }
+
+    private function getTypeSize( $StringType ){
+    	if( preg_match( '/(\w+)(\((.*?)\))*/i' , $StringType, $match) ){
+    		$type = $match[1];
+    		$size = '';
+    		if( isset($match[3]) ) $size = $match[3];
+    		return (object) array('type' => $type, 'size' => $size);
+    	}
+    }
+
 
     private function CheckType( $StringType, $value, $null ){
 
@@ -373,6 +435,110 @@ class system{
     	return true;
     }
 
+    function hide(){
+    	$last = end(array_keys($this->inputs_));
+    	$this->inputs_[$last]['hide'] = 'yes';
+    	return $this;
+    }
+
+    function switchButton( $values ){
+    	$last = end(array_keys($this->inputs_));
+    	$this->inputs_[$last]['switch'] = $values;
+    	return $this;
+    }
+
+
+    var $inputs_ = '';
+    function input( $field, $label = '' ){
+    	$this->inputs_[$field]['Label'] = $label;
+    	return $this;
+    }
+
+    var $formTitle_ = '';
+
+    function formTitle( $text ){
+    	$this->formTitle_  = $text;
+    	return $this;
+    }
+
+    function form( $text = '' ){
+
+    	$inputs = $this->getRules();
+    	$inp = array();
+    	$opts = '';
+    	foreach ($inputs as $key => $value) {
+    		$opts = '';
+    		if( array_key_exists($key, $this->inputs_) ){
+
+    			$class_easyui = 'textbox';
+    			$maxsize = '';
+    			$size = '50';
+
+    			$typesize = $this->getTypeSize( $value['Type'] );
+
+    			// regras Base de Dados por type
+    			switch ( $typesize->type ) {
+    				case 'text':
+    					$size = '50';
+    					$opts['multiline'] = 'true';
+
+    					break;
+
+    				case 'float':
+
+    					$class_easyui = 'numberbox';
+
+    					$opts['min'] = '0';
+    					$opts['precision'] = '2';
+
+    				case 'int':
+
+    					$class_easyui = 'numberbox';
+    					$opts['min'] = '0';
+    				
+    				default:
+    					# code...
+    					break;
+    			}
+
+    			if( $value['Null'] == 'NO' ){
+    				$opts['required'] = 'true';
+    			}
+
+    			if( $this->inputs_[$key]['Label'] ){
+    				//$opts['label'] = $this->inputs_[$key]['Label'];
+    			}
+
+    			
+    			if( is_numeric($typesize->size) ){
+    				$maxsize = $typesize->size;
+    			}
+
+    			if( array_key_exists('switch', $this->inputs_[$key])) {
+    				$opts['onText'] = 'Sim';
+    				$opts['offText'] = 'Não';
+    				$opts['checked'] = 'true';
+    				$opts['value'] = $this->inputs_[$key]['switch'];
+
+    				$class_easyui = 'switchbutton';
+    			}
+
+    			$inputs[$key]['Maxsize'] = $maxsize;
+    			$inputs[$key]['Size'] = $size;
+    			$inputs[$key]['class'] = $class_easyui;
+
+    			$inp[$key] = array_merge($inputs[$key], $this->inputs_[$key] );	
+    			$inp[$key]['options'] = $opts;
+
+    		}
+    		
+    	}
+
+    	$this->formTitle_  = $text;
+    	$this->result = array( 	'title' => $this->formTitle_,
+    							'inputs' => $inp );
+    	return $this;
+    }
 
 	
 }

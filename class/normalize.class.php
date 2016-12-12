@@ -22,6 +22,10 @@ class normalize{
 		
 	}
 
+	function img( $value, $row = NULL ){
+		return "<img src='file/".$value."' />" ;
+	}
+
 
 
 }
